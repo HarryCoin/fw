@@ -42,6 +42,20 @@ void init_rules(void) {
 }
 
 
+int check_packet_against_rules(rule_t packet) {
+	int i;
+
+	for (i = 0; i < rules_len; i++) {
+		// Match against all fields
+
+
+		// If reached here - rules fits. return it
+		// Log to file
+		// Return accept
+	}
+}
+
+
 
 void rule_to_string(rule_t rule, char *buffer) {
 	char temp[50];
@@ -50,9 +64,9 @@ void rule_to_string(rule_t rule, char *buffer) {
 	strcat(buffer,temp);
 	snprintf(temp, 200, " : %d.%d.%d.%d", NIPQUAD(rule.dst_ip));
 	strcat(buffer,temp);
-	snprintf(temp, 200, " || %u : %u", (rule.src_port), (rule.dst_port));
+	snprintf(temp, 200, " || %u : %u", ntohs(rule.src_port), ntohs(rule.dst_port));
 	strcat(buffer,temp);
-	snprintf(temp, 200, " || %d", rule.protocol);
+	snprintf(temp, 200, " || %d || %d", rule.protocol, rule.ack);
 	strcat(buffer,temp);
 }
 
@@ -64,18 +78,21 @@ void packet_to_rule_format(struct sk_buff *skb, rule_t *packet_as_rule) {
 
 	packet_iphdr = ip_hdr(skb);
 	packet_as_rule->protocol = packet_iphdr->protocol;
+	packet_as_rule-> ack = 0;
 
 	if (packet_iphdr->protocol == PROT_TCP) {
-		packet_tcph = tcp_hdr(skb);
-		printk(KERN_INFO "port %d\n", (u_short) ntohs(packet_tcph-> dest));
+		packet_tcph = (struct tcphdr *)(skb_transport_header(skb)+20);
 		packet_as_rule-> src_port = packet_tcph->source;
 		packet_as_rule-> dst_port = packet_tcph->dest;
 		packet_as_rule-> ack = packet_tcph->ack ? ACK_YES : ACK_NO;
 	}
+	
 	else if (packet_iphdr->protocol == PROT_UDP) {
-		packet_udph = udp_hdr(skb);
+		//packet_udph = udp_hdr(skb);
+		packet_udph = (struct udphdr *)(skb_transport_header(skb)+20);
 		packet_as_rule-> src_port = packet_udph->source;
 		packet_as_rule-> dst_port = packet_udph->dest;
+
 	} else { // ICMP
 		packet_as_rule-> src_port = PORT_ANY;
 		packet_as_rule-> dst_port = PORT_ANY;
@@ -87,7 +104,6 @@ void packet_to_rule_format(struct sk_buff *skb, rule_t *packet_as_rule) {
 	packet_as_rule-> dst_ip = packet_iphdr->daddr;
 	packet_as_rule-> dst_prefix_mask = 0;
 	packet_as_rule-> dst_prefix_size = 0;
-
 
 }
 
