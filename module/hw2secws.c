@@ -33,6 +33,11 @@ void load_rules(void) {
 
 }
 
+
+void print_rules(void) {
+	
+}
+
 void init_rules(void) {
 	rules[0].src_ip = in_aton("10.0.2.0");
 	rules[0].src_prefix_mask = in_aton("255.255.255.0");
@@ -50,11 +55,21 @@ void init_rules(void) {
 	rules[1].dst_prefix_mask = in_aton("255.255.255.255");
 	rules[1].src_port = 0;
 	rules[1].dst_port = htons(80);
-	rules[1].protocol = PROT_UDP;
+	rules[1].protocol = PROT_TCP;
 	rules[1].ack = ACK_ANY;
-	rules[1].action = NF_DROP;
+	rules[1].action = NF_ACCEPT;
 
-	rules_len = 2;
+	rules[2].src_ip = in_aton("10.0.1.3");
+	rules[2].src_prefix_mask = in_aton("255.255.255.255");
+	rules[2].dst_ip = 0;
+	rules[2].dst_prefix_mask = in_aton("255.255.255.255");
+	rules[2].src_port = 0;
+	rules[2].dst_port = htons(80);
+	rules[2].protocol = PROT_ICMP;
+	rules[2].ack = ACK_ANY;
+	rules[2].action = NF_DROP;
+
+	rules_len = 3;
 }
 
 
@@ -72,7 +87,7 @@ int check_ports(rule_t packet, rule_t curr_rule) {
 		}
 	}
 
-	printk(KERN_INFO "ports %d %d", packet.dst_port, curr_rule.dst_port);
+	//printk(KERN_INFO "ports %d %d", packet.dst_port, curr_rule.dst_port);
 
 	// Dest port
 	if (curr_rule.dst_port != 0) {
@@ -101,7 +116,7 @@ int check_packet_against_rules(rule_t packet) {
 
 		// Check source IP
 		if (rules[i].src_ip != 0) {
-			printk(KERN_INFO "checking src");
+			//printk(KERN_INFO "checking src");
 			ip_after_mask = packet.src_ip & rules[i].src_prefix_mask;
 			if (ip_after_mask != rules[i].src_ip) 
 				continue;
@@ -109,7 +124,7 @@ int check_packet_against_rules(rule_t packet) {
 
 		// Check dest IP
 		if (rules[i].dst_ip != 0) {
-			printk(KERN_INFO "checking dst");
+			//printk(KERN_INFO "checking dst");
 			ip_after_mask = packet.dst_ip & rules[i].dst_prefix_mask;
 			if (ip_after_mask != rules[i].dst_ip)
 				continue;
@@ -117,15 +132,15 @@ int check_packet_against_rules(rule_t packet) {
 
 		// Check protocol
 		if (rules[i].protocol != PROT_ANY) {
-			printk(KERN_INFO "checking prot");
-			printk(KERN_INFO "%d %d", packet.protocol, rules[i].protocol);
+			//printk(KERN_INFO "checking prot");
+			//printk(KERN_INFO "%d %d", packet.protocol, rules[i].protocol);
 			if (packet.protocol != rules[i].protocol)
 				continue;
 		}
 
 		// Check ports
 		if (rules[i].protocol == PROT_TCP || rules[i].protocol == PROT_UDP) {
-			printk(KERN_INFO "checking ports");
+			//printk(KERN_INFO "checking ports");
 			if (check_ports(packet, rules[i]) < 0)
 				continue;
 			
@@ -133,7 +148,7 @@ int check_packet_against_rules(rule_t packet) {
 
 		// Check ACK
 		if (rules[i].protocol == PROT_TCP && rules[i].ack != ACK_ANY) {
-			printk(KERN_INFO "checking ack");
+			//printk(KERN_INFO "checking ack");
 			if (packet.ack != rules[i].ack)
 				continue;
 		}
@@ -141,11 +156,11 @@ int check_packet_against_rules(rule_t packet) {
 		// If reached here - rules fits. return it
 		printk(KERN_INFO "we have a fit for rule %d", i);
 
-		// Log to file
-		// Return accept
+		// Log to file if action is drop
+		return rules[i].action;
 	}
-
-	return 1;
+	// If here - found no matching rule - default accept
+	return NF_ACCEPT;
 }
 
 
@@ -216,9 +231,9 @@ unsigned int counter_packets_blocked = 0;
 
 
 /* !------------ Hooks -------------! */
-struct nf_hook_ops nf_hook_in;
+struct nf_hook_ops nf_hook_pre;
 struct nf_hook_ops nf_hook_forward;
-struct nf_hook_ops nf_hook_out;
+struct nf_hook_ops nf_hook_post;
 /* !------------ /Hooks ------------! */
 
 
@@ -242,8 +257,8 @@ unsigned int hook_func_accept (
 	rule_to_string(packet, buff);
 	printk(KERN_INFO "oi: %s", buff);
 	check_packet_against_rules(packet);
-	printk(KERN_INFO "*** packet passed ***\n");
-	return NF_ACCEPT;
+	//printk(KERN_INFO "*** packet passed ***\n");
+	return check_packet_against_rules(packet);
 }
 
 unsigned int hook_func_drop (
@@ -270,12 +285,20 @@ static int __init load_module(void) {
 	counter_packets_passed = 0;
 	counter_packets_blocked = 0;
 
-	// Init IN hook
-	nf_hook_in.hook = hook_func_accept;
-	nf_hook_in.hooknum = NF_INET_PRE_ROUTING;
-	nf_hook_in.pf = PF_INET;
-	nf_hook_in.priority = NF_IP_PRI_FIRST;
-	nf_register_hook(&nf_hook_in);
+	// Init PRE hook
+	nf_hook_pre.hook = hook_func_accept;
+	nf_hook_pre.hooknum = NF_INET_PRE_ROUTING;
+	nf_hook_pre.pf = PF_INET;
+	nf_hook_pre.priority = NF_IP_PRI_FIRST;
+	nf_register_hook(&nf_hook_pre);
+
+	// Init POST hook
+	nf_hook_post.hook = hook_func_accept;
+	nf_hook_post.hooknum = NF_INET_POST_ROUTING;
+	nf_hook_post.pf = PF_INET;
+	nf_hook_post.priority = NF_IP_PRI_FIRST;
+	nf_register_hook(&nf_hook_post);
+
 
 
 	// Init Sysfs device
@@ -286,7 +309,8 @@ static int __init load_module(void) {
 
 
 static void __exit unload_module(void) {
-	nf_unregister_hook(&nf_hook_in);
+	nf_unregister_hook(&nf_hook_pre);
+	nf_unregister_hook(&nf_hook_post);
 
 	fw_sysfs_exit();
 }
