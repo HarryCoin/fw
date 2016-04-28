@@ -34,11 +34,15 @@ void load_rules(void) {
 }
 
 void init_rules(void) {
-	unsigned int addr = in_aton("127.0.0.1");
-	printk(KERN_INFO "addr %d\n", addr);
-	rules[0].src_ip = addr;
+	rules[0].src_ip = in_aton("10.0.2.0");
 	printk(KERN_INFO "addr %d\n", rules[0].src_ip);
-
+	rules[0].src_prefix_mask = in_aton("255.255.255.0");
+	printk(KERN_INFO "addr %d\n", rules[0].src_prefix_mask);
+	rules[1].src_ip = in_aton("10.0.1.0");
+	printk(KERN_INFO "addr %d\n", rules[0].src_ip);
+	rules[1].src_prefix_mask = in_aton("255.255.255.0");
+	printk(KERN_INFO "addr %d\n", rules[0].src_prefix_mask);
+	rules_len = 2;
 }
 
 
@@ -47,9 +51,40 @@ int check_packet_against_rules(rule_t packet) {
 
 	for (i = 0; i < rules_len; i++) {
 		// Match against all fields
+		// Check direction - wtf
 
+		// Check source IP
+		if (rules[i].src_ip != 0) {
+			unsigned int ip_after_mask = packet.src_ip & rules[i].src_prefix_mask;
+			if (ip_after_mask != rules[i].src_ip)
+				continue;
+		}
+
+		// Check dest IP
+		if (rules[i].dst_ip != 0) {
+			unsigned int ip_after_mask = packet.dst_ip & rules[i].dst_prefix_mask;
+			if (ip_after_mask != rules[i].dst_ip)
+				continue;
+		}
+
+		// Check protocol
+		if (rules[i].protocol != PROT_ANY) {
+			if (packet.protocol != rules[i].protocol)
+				continue;
+		}
+
+		// Check ports
+		if (rules[i].protocol == PROT_TCP || rules[i].protocol == PROT_UDP) {
+			if (rules[i].src_port != 0) {
+				if (packet.src_port != rules[i].src_port)
+					continue;
+			}
+
+		}
 
 		// If reached here - rules fits. return it
+		printk(KERN_INFO "we have a fit for rule %d", i);
+
 		// Log to file
 		// Return accept
 	}
@@ -86,7 +121,7 @@ void packet_to_rule_format(struct sk_buff *skb, rule_t *packet_as_rule) {
 		packet_as_rule-> dst_port = packet_tcph->dest;
 		packet_as_rule-> ack = packet_tcph->ack ? ACK_YES : ACK_NO;
 	}
-	
+
 	else if (packet_iphdr->protocol == PROT_UDP) {
 		//packet_udph = udp_hdr(skb);
 		packet_udph = (struct udphdr *)(skb_transport_header(skb)+20);
@@ -147,6 +182,7 @@ unsigned int hook_func_accept (
 
 	rule_to_string(packet, buff);
 	printk(KERN_INFO "oi: %s", buff);
+	check_packet_against_rules(packet);
 	printk(KERN_INFO "*** packet passed ***\n");
 	return NF_ACCEPT;
 }
@@ -166,9 +202,10 @@ unsigned int hook_func_drop (
 
 
 static int __init load_module(void) {
-	printk(KERN_INFO "%d\n", (int) &rules[0]);
-	printk(KERN_INFO "%d\n", (int) &rules[1]);
-	printk(KERN_INFO "%d\n", (int) &rules[3]);
+	printk(KERN_INFO "###########################################################\n");
+	printk(KERN_INFO "###########################################################\n");
+	printk(KERN_INFO "###########################################################\n");
+
 	init_rules();
 
 	counter_packets_passed = 0;
