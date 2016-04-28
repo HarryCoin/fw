@@ -24,13 +24,17 @@ __attribute__((section("__versions"))) = {
 	{ 0x34d76c42, "__class_create" },
 	{ 0xf34131ee, "__register_chrdev" },
 	{ 0x4a54cfda, "nf_register_hook" },
+	{ 0xf0fdf6cb, "__stack_chk_fail" },
+	{ 0x61651be, "strcat" },
+	{ 0xb81960ca, "snprintf" },
+	{ 0x50eedeb8, "printk" },
+	{ 0x1b6314fd, "in_aton" },
 	{ 0x6bc3fbc0, "__unregister_chrdev" },
 	{ 0x6dcd7881, "class_destroy" },
 	{ 0x6d597694, "device_destroy" },
 	{ 0x8ad2e126, "device_remove_file" },
 	{ 0xf9e73082, "scnprintf" },
 	{ 0x42224298, "sscanf" },
-	{ 0x50eedeb8, "printk" },
 	{ 0xb4390f9a, "mcount" },
 };
 
@@ -40,4 +44,4 @@ __attribute__((section(".modinfo"))) =
 "depends=";
 
 
-MODULE_INFO(srcversion, "FDEF07CEC3C1ACDB5FB2F11");
+MODULE_INFO(srcversion, "8EA54372D2239CD585EB91C");

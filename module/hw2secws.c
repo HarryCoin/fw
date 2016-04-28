@@ -12,6 +12,13 @@
 #include <linux/kernel.h> // For KERN_INFO and Macros
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
+#include <linux/ip.h>
+
+#define NIPQUAD(addr) \
+((unsigned char *)&addr)[0], \
+((unsigned char *)&addr)[1], \
+((unsigned char *)&addr)[2], \
+((unsigned char *)&addr)[3]
 
 #include "fw.h"
 #include "shared_vars.h"
@@ -20,20 +27,67 @@
 rule_t rules[50];
 int rules_len = 0;
 
-unsigned int inet_addr(char *str)
-{ //http://osdir.com/ml/linux.kernel.kernelnewbies/2003-03/msg00145.html
-	int a,b,c,d;
-	char arr[4];
-	sscanf(str,"%d.%d.%d.%d",&a,&b,&c,&d);
-	arr[0] = a; arr[1] = b; arr[2] = c; arr[3] = d;
-	return *(unsigned int*)arr;
+
+void load_rules(void) {
+
+
 }
 
 void init_rules(void) {
-	unsigned int addr = inet_addr("127.0.0.1");
+	unsigned int addr = in_aton("127.0.0.1");
 	printk(KERN_INFO "addr %d\n", addr);
 	rules[0].src_ip = addr;
 	printk(KERN_INFO "addr %d\n", rules[0].src_ip);
+
+}
+
+
+
+void rule_to_string(rule_t rule, char *buffer) {
+	char temp[50];
+	//bla = in_ntoa(rule.src_ip);
+	snprintf(temp, 200, "%d.%d.%d.%d", NIPQUAD(rule.src_ip));
+	strcat(buffer,temp);
+	snprintf(temp, 200, " : %d.%d.%d.%d", NIPQUAD(rule.dst_ip));
+	strcat(buffer,temp);
+	snprintf(temp, 200, " || %u : %u", (rule.src_port), (rule.dst_port));
+	strcat(buffer,temp);
+	snprintf(temp, 200, " || %d", rule.protocol);
+	strcat(buffer,temp);
+}
+
+
+void packet_to_rule_format(struct sk_buff *skb, rule_t *packet_as_rule) {
+	struct iphdr *packet_iphdr;
+	struct tcphdr *packet_tcph;
+	struct udphdr *packet_udph;
+
+	packet_iphdr = ip_hdr(skb);
+	packet_as_rule->protocol = packet_iphdr->protocol;
+
+	if (packet_iphdr->protocol == PROT_TCP) {
+		packet_tcph = tcp_hdr(skb);
+		printk(KERN_INFO "port %d\n", (u_short) ntohs(packet_tcph-> dest));
+		packet_as_rule-> src_port = packet_tcph->source;
+		packet_as_rule-> dst_port = packet_tcph->dest;
+		packet_as_rule-> ack = packet_tcph->ack ? ACK_YES : ACK_NO;
+	}
+	else if (packet_iphdr->protocol == PROT_UDP) {
+		packet_udph = udp_hdr(skb);
+		packet_as_rule-> src_port = packet_udph->source;
+		packet_as_rule-> dst_port = packet_udph->dest;
+	} else { // ICMP
+		packet_as_rule-> src_port = PORT_ANY;
+		packet_as_rule-> dst_port = PORT_ANY;
+	}
+
+	packet_as_rule-> src_ip = packet_iphdr->saddr;
+	packet_as_rule-> src_prefix_mask = 0;
+	packet_as_rule-> src_prefix_size = 0;
+	packet_as_rule-> dst_ip = packet_iphdr->daddr;
+	packet_as_rule-> dst_prefix_mask = 0;
+	packet_as_rule-> dst_prefix_size = 0;
+
 
 }
 
@@ -66,8 +120,17 @@ unsigned int hook_func_accept (
         const struct net_device *in, 
         const struct net_device *out,         
         int (*okfn)(struct sk_buff *)) {
+	char buff[200] = {0};
 
 	counter_packets_passed++;
+	// Analyze packet
+	rule_t packet;
+	packet_to_rule_format(skb, &packet);
+
+	// printk(KERN_INFO "ip %u\n", packet.src_ip);
+
+	rule_to_string(packet, buff);
+	printk(KERN_INFO "oi: %s", buff);
 	printk(KERN_INFO "*** packet passed ***\n");
 	return NF_ACCEPT;
 }
@@ -97,24 +160,11 @@ static int __init load_module(void) {
 
 	// Init IN hook
 	nf_hook_in.hook = hook_func_accept;
-	nf_hook_in.hooknum = NF_INET_LOCAL_IN;
+	nf_hook_in.hooknum = NF_INET_PRE_ROUTING;
 	nf_hook_in.pf = PF_INET;
 	nf_hook_in.priority = NF_IP_PRI_FIRST;
 	nf_register_hook(&nf_hook_in);
 
-	// Init OUT hook
-	nf_hook_out.hook = hook_func_accept;
-	nf_hook_out.hooknum = NF_INET_LOCAL_OUT;
-	nf_hook_out.pf = PF_INET;
-	nf_hook_out.priority = NF_IP_PRI_FIRST;
-	nf_register_hook(&nf_hook_out);
-
-	// Init FORWARD hook
-	nf_hook_forward.hook = hook_func_drop;
-	nf_hook_forward.hooknum = NF_INET_FORWARD;
-	nf_hook_forward.pf = PF_INET;
-	nf_hook_forward.priority = NF_IP_PRI_FIRST;
-	nf_register_hook(&nf_hook_forward);
 
 	// Init Sysfs device
 	fw_sysfs_init();
@@ -125,8 +175,6 @@ static int __init load_module(void) {
 
 static void __exit unload_module(void) {
 	nf_unregister_hook(&nf_hook_in);
-	nf_unregister_hook(&nf_hook_out);
-	nf_unregister_hook(&nf_hook_forward);
 
 	fw_sysfs_exit();
 }
