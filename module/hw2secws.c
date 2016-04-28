@@ -75,11 +75,37 @@ int check_packet_against_rules(rule_t packet) {
 
 		// Check ports
 		if (rules[i].protocol == PROT_TCP || rules[i].protocol == PROT_UDP) {
+			// Source port
 			if (rules[i].src_port != 0) {
-				if (packet.src_port != rules[i].src_port)
-					continue;
+				if (rules[i].src_port == 1023) {
+					if (packet.src_port <= 1023) {
+						continue;
+					}
+				}
+				else { // Rule port != Any, != 1023
+					if (packet.src_port != rules[i].src_port)
+						continue;
+				}
 			}
 
+			// Dest port
+			if (rules[i].dst_port != 0) {
+				if (rules[i].dst_port == 1023) {
+					if (packet.dst_port <= 1023) {
+						continue;
+					}
+				}
+				else { // Rule port != Any, != 1023
+					if (packet.dst_port != rules[i].dst_port)
+						continue;
+				}
+			}
+		}
+
+		// Check ACK
+		if (rules[i].protocol == PROT_TCP && rules[i].ack != ACK_ANY) {
+			if (packet.ack != rules[i].ack)
+				continue;
 		}
 
 		// If reached here - rules fits. return it
