@@ -24,8 +24,8 @@ __attribute__((section("__versions"))) = {
 	{ 0x34d76c42, "__class_create" },
 	{ 0xf34131ee, "__register_chrdev" },
 	{ 0x4a54cfda, "nf_register_hook" },
-	{ 0x61651be, "strcat" },
 	{ 0xf0fdf6cb, "__stack_chk_fail" },
+	{ 0x61651be, "strcat" },
 	{ 0xb81960ca, "snprintf" },
 	{ 0x50eedeb8, "printk" },
 	{ 0x1b6314fd, "in_aton" },
@@ -44,4 +44,4 @@ __attribute__((section(".modinfo"))) =
 "depends=";
 
 
-MODULE_INFO(srcversion, "34E79AD35E8428F54FBE77E");
+MODULE_INFO(srcversion, "45AAA6B44A4CDFD5B689549");

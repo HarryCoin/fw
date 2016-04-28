@@ -35,75 +35,105 @@ void load_rules(void) {
 
 void init_rules(void) {
 	rules[0].src_ip = in_aton("10.0.2.0");
-	printk(KERN_INFO "addr %d\n", rules[0].src_ip);
 	rules[0].src_prefix_mask = in_aton("255.255.255.0");
-	printk(KERN_INFO "addr %d\n", rules[0].src_prefix_mask);
-	rules[1].src_ip = in_aton("10.0.1.0");
-	printk(KERN_INFO "addr %d\n", rules[0].src_ip);
-	rules[1].src_prefix_mask = in_aton("255.255.255.0");
-	printk(KERN_INFO "addr %d\n", rules[0].src_prefix_mask);
+	rules[0].dst_ip = 0;
+	rules[0].dst_prefix_mask = in_aton("255.255.255.255");
+	rules[0].src_port = 0;
+	rules[0].dst_port = 80;
+	rules[0].protocol = PROT_UDP;
+	rules[0].ack = ACK_ANY;
+	rules[0].action = NF_ACCEPT;
+
+	rules[1].src_ip = in_aton("10.0.1.1");
+	rules[1].src_prefix_mask = in_aton("255.255.255.255");
+	rules[1].dst_ip = 0;
+	rules[1].dst_prefix_mask = in_aton("255.255.255.255");
+	rules[1].src_port = 0;
+	rules[1].dst_port = htons(80);
+	rules[1].protocol = PROT_UDP;
+	rules[1].ack = ACK_ANY;
+	rules[1].action = NF_DROP;
+
 	rules_len = 2;
 }
 
 
+int check_ports(rule_t packet, rule_t curr_rule) {
+	// Source port
+	if (curr_rule.src_port != 0) {
+		if (curr_rule.src_port == 1023) {
+			if (packet.src_port <= 1023) {
+				return -1;
+			}
+		}
+		else { // Rule port != Any, != 1023
+			if (packet.src_port != curr_rule.src_port)
+				return -1;
+		}
+	}
+
+	printk(KERN_INFO "ports %d %d", packet.dst_port, curr_rule.dst_port);
+
+	// Dest port
+	if (curr_rule.dst_port != 0) {
+		if (curr_rule.dst_port == 1023) {
+			if (packet.dst_port <= 1023) {
+				return -1;
+			}
+		}
+		else { // Rule port != Any, != 1023
+			if (packet.dst_port != curr_rule.dst_port)
+				return -1;
+		}
+	}
+
+	// If reached here - ports match
+	return 1;
+}
+
+
 int check_packet_against_rules(rule_t packet) {
-	int i;
+	int i; unsigned int ip_after_mask;
 
 	for (i = 0; i < rules_len; i++) {
 		// Match against all fields
-		// Check direction - wtf
+		// TODO Check direction - wtf
 
 		// Check source IP
 		if (rules[i].src_ip != 0) {
-			unsigned int ip_after_mask = packet.src_ip & rules[i].src_prefix_mask;
-			if (ip_after_mask != rules[i].src_ip)
+			printk(KERN_INFO "checking src");
+			ip_after_mask = packet.src_ip & rules[i].src_prefix_mask;
+			if (ip_after_mask != rules[i].src_ip) 
 				continue;
 		}
 
 		// Check dest IP
 		if (rules[i].dst_ip != 0) {
-			unsigned int ip_after_mask = packet.dst_ip & rules[i].dst_prefix_mask;
+			printk(KERN_INFO "checking dst");
+			ip_after_mask = packet.dst_ip & rules[i].dst_prefix_mask;
 			if (ip_after_mask != rules[i].dst_ip)
 				continue;
 		}
 
 		// Check protocol
 		if (rules[i].protocol != PROT_ANY) {
+			printk(KERN_INFO "checking prot");
+			printk(KERN_INFO "%d %d", packet.protocol, rules[i].protocol);
 			if (packet.protocol != rules[i].protocol)
 				continue;
 		}
 
 		// Check ports
 		if (rules[i].protocol == PROT_TCP || rules[i].protocol == PROT_UDP) {
-			// Source port
-			if (rules[i].src_port != 0) {
-				if (rules[i].src_port == 1023) {
-					if (packet.src_port <= 1023) {
-						continue;
-					}
-				}
-				else { // Rule port != Any, != 1023
-					if (packet.src_port != rules[i].src_port)
-						continue;
-				}
-			}
-
-			// Dest port
-			if (rules[i].dst_port != 0) {
-				if (rules[i].dst_port == 1023) {
-					if (packet.dst_port <= 1023) {
-						continue;
-					}
-				}
-				else { // Rule port != Any, != 1023
-					if (packet.dst_port != rules[i].dst_port)
-						continue;
-				}
-			}
+			printk(KERN_INFO "checking ports");
+			if (check_ports(packet, rules[i]) < 0)
+				continue;
+			
 		}
 
 		// Check ACK
 		if (rules[i].protocol == PROT_TCP && rules[i].ack != ACK_ANY) {
+			printk(KERN_INFO "checking ack");
 			if (packet.ack != rules[i].ack)
 				continue;
 		}
@@ -114,12 +144,15 @@ int check_packet_against_rules(rule_t packet) {
 		// Log to file
 		// Return accept
 	}
+
+	return 1;
 }
 
 
 
 void rule_to_string(rule_t rule, char *buffer) {
 	char temp[50];
+	buffer[0] = 0;
 	//bla = in_ntoa(rule.src_ip);
 	snprintf(temp, 200, "%d.%d.%d.%d", NIPQUAD(rule.src_ip));
 	strcat(buffer,temp);
@@ -197,11 +230,11 @@ unsigned int hook_func_accept (
         const struct net_device *in, 
         const struct net_device *out,         
         int (*okfn)(struct sk_buff *)) {
-	char buff[200] = {0};
+	char buff[200];
+	rule_t packet;
 
 	counter_packets_passed++;
 	// Analyze packet
-	rule_t packet;
 	packet_to_rule_format(skb, &packet);
 
 	// printk(KERN_INFO "ip %u\n", packet.src_ip);
