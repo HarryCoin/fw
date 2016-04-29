@@ -10,12 +10,17 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+ #include <arpa/inet.h>
 
 #define NIPQUAD(addr) \
 ((unsigned char *)&addr)[0], \
 ((unsigned char *)&addr)[1], \
 ((unsigned char *)&addr)[2], \
 ((unsigned char *)&addr)[3]
+
+
+#define write_to_buf(format, what) buf_pos = buf_pos + snprintf(buf + buf_pos, 4096 - buf_pos, format, what);
 
 int get_rules_size() {
 	char* filename = "/sys/class/fw/fw_rules/rules_size";
@@ -38,6 +43,52 @@ int get_rules_size() {
 	return size;
 }
 
+
+void load_rules_from_file() {
+	char *filename = "a.txt";
+	char buf[4096] = {0};
+	int buf_pos = 2;
+	buf[0] = *"5"; buf[1] = *"5";
+	FILE *f; int ip;
+	f = fopen(filename, "r");
+			struct in_addr address;
+
+
+	char rule_name[20], direction[10], src_ip[25], dst_ip[25], protocol[10], src_port[7], dst_port[7], ack[7], action[10];
+
+	if (fscanf(f, "%s %s %s %s %s %s %s %s %s\n", \
+			rule_name, direction, src_ip, dst_ip, protocol, src_port, dst_port, ack, action) < 0) {
+		printf("error");
+		return;
+	}
+
+	write_to_buf("%s ", rule_name);
+
+	char dir[2] = "0";
+	if (strcmp("in",direction) == 0)
+		dir[0] = (char) 1;
+	else if (strcmp("out",direction) == 0)
+		dir[0] = (char) 2;
+	else if (strcmp("any",direction) == 0)
+		dir[0] = (char) 3;
+	write_to_buf("%s ", dir);
+
+	if (strstr(src_ip,"/") != NULL) {
+		printf("\n\nwhat\n\n");
+		// Divide
+	} else {
+		//don't divide? :\
+		printf("\n\n\nassaf \n");
+		//ip = in_aton(src_ip);
+		//printf("\n%s %d\n",src_ip, address.s_addr);
+		//write_to_buf("%d ", ip);
+
+	}
+	printf("%s\n", buf);
+	//printf("%s %s %s %s %s %s %s %s %s\n", rule_name, direction, src_ip, dst_ip, protocol, src_port, dst_port, ack, action);
+	close(f);
+}
+
 int print_rules() {
 	int rules_len = get_rules_size();
 
@@ -48,7 +99,7 @@ int print_rules() {
 		printf("Error opening file. Quitting.\n");
 		return;
 	}
-
+	load_rules_from_file();
 	char buf[200];
 	char rule_name[20];
 	int direction, src_ip, src_nps, dst_ip, dst_nps, protocol, src_port, dst_port, ack, action;
@@ -117,9 +168,9 @@ int print_rules() {
 		else
 			printf("any ");
 
-		if (ack == 0)
+		if (action == 0)
 			printf("drop");
-		else if (ack == 1)
+		else if (action == 1)
 			printf("accept");
 
 		printf("\n");
