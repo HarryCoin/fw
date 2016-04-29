@@ -39,26 +39,33 @@ void print_rules(void) {
 }
 
 void init_rules(void) {
-	rules[0].src_ip = in_aton("10.0.2.0");
+	//rules[0].rule_name = "rule0";
+	scnprintf(rules[0].rule_name, 20, "rule0");
+	rules[0].direction = DIRECTION_ANY;
+	rules[0].src_ip = in_aton("10.0.1.1");
 	rules[0].src_prefix_mask = in_aton("255.255.255.0");
 	rules[0].dst_ip = 0;
 	rules[0].dst_prefix_mask = in_aton("255.255.255.255");
 	rules[0].src_port = 0;
-	rules[0].dst_port = 80;
-	rules[0].protocol = PROT_UDP;
+	rules[0].dst_port = htons(80);
+	rules[0].protocol = PROT_TCP;
 	rules[0].ack = ACK_ANY;
 	rules[0].action = NF_ACCEPT;
 
-	rules[1].src_ip = in_aton("10.0.1.1");
-	rules[1].src_prefix_mask = in_aton("255.255.255.255");
-	rules[1].dst_ip = 0;
-	rules[1].dst_prefix_mask = in_aton("255.255.255.255");
+	scnprintf(rules[1].rule_name, 20, "rule1");
+	rules[1].direction = DIRECTION_ANY;
+	rules[1].src_ip = 0;
+	rules[1].src_prefix_mask = in_aton("255.255.255.0");
+	rules[1].dst_ip = in_aton("10.0.1.3");
+	rules[1].dst_prefix_mask = in_aton("255.255.255.0");
 	rules[1].src_port = 0;
 	rules[1].dst_port = htons(80);
-	rules[1].protocol = PROT_TCP;
+	rules[1].protocol = PROT_ICMP;
 	rules[1].ack = ACK_ANY;
-	rules[1].action = NF_ACCEPT;
+	rules[1].action = NF_DROP;
 
+	scnprintf(rules[2].rule_name, 20, "rule2");
+	rules[2].direction = DIRECTION_ANY;
 	rules[2].src_ip = in_aton("10.0.1.3");
 	rules[2].src_prefix_mask = in_aton("255.255.255.255");
 	rules[2].dst_ip = 0;
@@ -108,25 +115,28 @@ int check_ports(rule_t packet, rule_t curr_rule) {
 
 
 int check_packet_against_rules(rule_t packet) {
-	int i; unsigned int ip_after_mask;
+	int i; unsigned int packet_after_mask, rule_after_mask;
 
 	for (i = 0; i < rules_len; i++) {
 		// Match against all fields
 		// TODO Check direction - wtf
+		//printk(KERN_INFO "checking rule %d", i);
 
 		// Check source IP
 		if (rules[i].src_ip != 0) {
 			//printk(KERN_INFO "checking src");
-			ip_after_mask = packet.src_ip & rules[i].src_prefix_mask;
-			if (ip_after_mask != rules[i].src_ip) 
+			packet_after_mask = packet.src_ip & rules[i].src_prefix_mask;
+			rule_after_mask = rules[i].src_ip & rules[i].src_prefix_mask;
+			if (packet_after_mask != rule_after_mask) 
 				continue;
 		}
 
 		// Check dest IP
 		if (rules[i].dst_ip != 0) {
 			//printk(KERN_INFO "checking dst");
-			ip_after_mask = packet.dst_ip & rules[i].dst_prefix_mask;
-			if (ip_after_mask != rules[i].dst_ip)
+			packet_after_mask = packet.dst_ip & rules[i].dst_prefix_mask;
+			rule_after_mask = rules[i].dst_ip & rules[i].dst_prefix_mask;
+			if (packet_after_mask != rule_after_mask) 
 				continue;
 		}
 
@@ -162,7 +172,6 @@ int check_packet_against_rules(rule_t packet) {
 	// If here - found no matching rule - default accept
 	return NF_ACCEPT;
 }
-
 
 
 void rule_to_string(rule_t rule, char *buffer) {
@@ -256,7 +265,7 @@ unsigned int hook_func_accept (
 
 	rule_to_string(packet, buff);
 	printk(KERN_INFO "oi: %s", buff);
-	check_packet_against_rules(packet);
+	//check_packet_against_rules(packet);
 	//printk(KERN_INFO "*** packet passed ***\n");
 	return check_packet_against_rules(packet);
 }
