@@ -47,8 +47,8 @@ int get_rules_size() {
 void load_rules_from_file() {
 	char *filename = "a.txt";
 	char buf[4096] = {0};
-	int buf_pos = 2;
-	buf[0] = *"5"; buf[1] = *"5";
+	int buf_pos = 3;
+	buf[0] = *"0"; buf[1] = *"1"; buf[2] = *"#";
 	FILE *f; int ip;
 	f = fopen(filename, "r");
 			struct in_addr address;
@@ -62,8 +62,10 @@ void load_rules_from_file() {
 		return;
 	}
 
+	// Rule name
 	write_to_buf("%s ", rule_name);
 
+	// Direction
 	char dir[2] = "0";
 	if (strcmp("in",direction) == 0)
 		dir[0] = (char) 1;
@@ -73,17 +75,100 @@ void load_rules_from_file() {
 		dir[0] = (char) 3;
 	write_to_buf("%s ", dir);
 
-	if (strstr(src_ip,"/") != NULL) {
-		printf("\n\nwhat\n\n");
-		// Divide
-	} else {
-		//don't divide? :\
-		printf("\n\n\nassaf \n");
-		//ip = in_aton(src_ip);
-		//printf("\n%s %d\n",src_ip, address.s_addr);
-		//write_to_buf("%d ", ip);
-
+	char *token = NULL;
+	// Source IP
+	if (strcmp("any", src_ip) == 0) {
+		// Fix
+		write_to_buf("%d ", 0);
+		write_to_buf("%d ", 32);
 	}
+	else {
+		if (strstr(src_ip, "/") == NULL) {
+			inet_aton(src_ip, &address);
+		} else {
+			token = strtok(src_ip, "/");
+			inet_aton(token, &address);
+		}
+		write_to_buf(" %u ", address.s_addr);
+		if (token == NULL) {
+			write_to_buf("%d ", 32);
+		} else {
+			token = strtok(NULL, "/");
+			write_to_buf("%s ", token);
+		}
+	}
+
+	// Destination IP
+	token = NULL;
+	if (strcmp("any", dst_ip) == 0) {
+		// Fix
+		write_to_buf("%d ", 0);
+		write_to_buf("%d ", 32);
+	}
+	else {
+		if (strstr(dst_ip, "/") == NULL) {
+			inet_aton(dst_ip, &address);
+		} else {
+			token = strtok(dst_ip, "/");
+			inet_aton(token, &address);
+		}
+		write_to_buf(" %u ", address.s_addr);
+		if (token == NULL) {
+			write_to_buf("%d ", 32);
+		} else {
+			token = strtok(NULL, "/");
+			write_to_buf("%s ", token);
+		}
+	}
+
+	// Protocol
+	if (strcmp("icmp",protocol) == 0)
+		write_to_buf("%s ", "1");
+	if (strcmp("tcp",protocol) == 0)
+		write_to_buf("%s ", "6");
+	if (strcmp("udp",protocol) == 0)
+		write_to_buf("%s ", "17");
+	if (strcmp("other",protocol) == 0)
+		write_to_buf("%s ", "255");
+	if (strcmp("any",protocol) == 0)
+		write_to_buf("%s ", "143");
+
+	// Source port
+	if (strcmp(">1023",src_port) == 0) {
+		write_to_buf("%s ", "1023");
+	}
+	else if (strcmp("any",src_port) == 0) {
+		write_to_buf("%s ", "0"); 
+	} else {
+		write_to_buf("%s ", src_port); 
+	}
+
+	// Dest port
+	if (strcmp(">1023",dst_port) == 0) {
+		write_to_buf("%s ", "1023");
+	}
+	else if (strcmp("any",dst_port) == 0) {
+		write_to_buf("%s ", "0"); 
+	} else {
+		write_to_buf("%s ", dst_port); 
+	}
+
+	// Ack
+	if (strcmp("no",direction) == 0)
+		dir[0] = (char) 1;
+	else if (strcmp("yes",direction) == 0)
+		dir[0] = (char) 2;
+	else if (strcmp("any",direction) == 0)
+		dir[0] = (char) 3;
+	write_to_buf("%s  ", dir);
+
+	// Action
+	if (strcmp("drop",action) == 0) {
+		write_to_buf("%s ", "0");
+	}
+	else if (strcmp("accept",action) == 0)
+		write_to_buf("%s ", "1");
+
 	printf("%s\n", buf);
 	//printf("%s %s %s %s %s %s %s %s %s\n", rule_name, direction, src_ip, dst_ip, protocol, src_port, dst_port, ack, action);
 	close(f);

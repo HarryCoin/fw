@@ -27,7 +27,6 @@ static struct device* sysfs_device = NULL;
 static char* CHAR_DEVICE_NAME = "fw_dev";
 static char* FW_CLASS_NAME = "fw";
 static char* SYSFS_DEVICE_NAME = "fw_rules";
-static char* ATTR_RULES_SIZE = "rules_size";
 /* !------------ /Device IDs and name ----------------------! */
 
 
@@ -97,9 +96,17 @@ ssize_t display_do_nothing(struct device *dev, struct device_attribute *attr, ch
 	return 0;
 }
 
+ssize_t store_load_rules(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	// sysfs store implementation
+{
+	//rules_len = 0;
+	return count;	
+}
+
 static DEVICE_ATTR(rules_size, S_IRWXO , display_rules_size, store_do_nothing);
 static DEVICE_ATTR(rules, S_IRWXO , get_rules, store_do_nothing);
 static DEVICE_ATTR(clear_rules, S_IRWXO , display_do_nothing, store_clear_rules);
+static DEVICE_ATTR(load_rules, S_IRWXO , display_do_nothing, store_load_rules);
+
 
 
 
@@ -117,6 +124,7 @@ typedef enum {
 	stage_attr1 = 3,
 	stage_attr2 = 4,
 	stage_attr3 = 5,
+	stage_attr4 = 5,
 	all = 100
 } sysfs_stages;
 
@@ -124,6 +132,9 @@ typedef enum {
 // And cleans up all stages up to including that stage.
 // e.g. in: stage_class, out: destroys the sysfs class and then unregisters the chardev
 void exitProperly(sysfs_stages stage) {
+	if (stage >= stage_attr4) {
+		device_remove_file(sysfs_device, (const struct device_attribute *)&dev_attr_load_rules.attr);
+	}
 	if (stage >= stage_attr3) {
 		device_remove_file(sysfs_device, (const struct device_attribute *)&dev_attr_clear_rules.attr);
 	}
@@ -190,6 +201,13 @@ static int fw_sysfs_init(void)
 	if (device_create_file(sysfs_device, (const struct device_attribute *)&dev_attr_clear_rules.attr))
 	{
 		exitProperly(stage_attr2);
+		return -1;
+	}
+
+	// Create sysfs file attributes	
+	if (device_create_file(sysfs_device, (const struct device_attribute *)&dev_attr_load_rules.attr))
+	{
+		exitProperly(stage_attr3);
 		return -1;
 	}
 	
